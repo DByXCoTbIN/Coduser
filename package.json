@@ -1,0 +1,87 @@
+{
+  "name": "brauser-ide",
+  "version": "1.0.0",
+  "description": "Браузер с интегрированной IDE для веб-разработки",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently \"npm run electron:dev\" \"npm run backend:dev\" \"npm run ide:dev\"",
+    "electron:dev": "electron . --dev",
+    "backend:dev": "cd backend && python -m uvicorn main:app --reload",
+    "ide:dev": "cd ide && npm run dev",
+    "build": "npm run build:all",
+    "build:all": "npm run build:electron && npm run build:backend && npm run build:ide",
+    "build:electron": "cd electron && npm run build",
+    "build:backend": "cd backend && python -m PyInstaller --onefile main.py",
+    "build:ide": "cd ide && npm run build",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "package": "electron-builder",
+    "package:win": "electron-builder --win",
+    "package:mac": "electron-builder --mac",
+    "package:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "electron-store": "^8.1.0",
+    "node-pty": "^1.0.0",
+    "socket.io": "^4.7.2",
+    "xterm": "^5.3.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "concurrently": "^8.2.2",
+    "electron": "^42.4.1",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.2",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  },
+  "build": {
+    "appId": "com.brauser.ide",
+    "productName": "Brauser IDE",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "backend/**/*",
+      "ide/**/*",
+      "servers/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "servers/xampp",
+        "to": "servers/xampp"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "assets/icon.png"
+    }
+  },
+  "allowScripts": {
+    "electron@28.3.3": true
+  }
+}

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:* https://*; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src https://cdnjs.cloudflare.com; img-src 'self' data: http://localhost:* https:*; connect-src 'self' http://localhost:*; frame-src *;">
+  <title>Brauser IDE</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Title Bar -->
+    <header id="titlebar">
+      <div class="titlebar-drag"><span class="logo"><i class="fas fa-code"></i> Brauser IDE</span></div>
+      <div class="titlebar-btns">
+        <button class="tb-btn" id="btn-min"><i class="fas fa-minus"></i></button>
+        <button class="tb-btn" id="btn-max"><i class="fas fa-square"></i></button>
+        <button class="tb-btn tb-close" id="btn-close"><i class="fas fa-times"></i></button>
+      </div>
+    </header>
+
+    <!-- Menu (hidden by default) -->
+    <nav id="menubar" class="hidden">
+      <div class="menu-items">
+        <div class="menu-item">File
+          <div class="dropdown">
+            <div class="dd-item" data-action="new-file"><i class="fas fa-file"></i> New File <span>Ctrl+N</span></div>
+            <div class="dd-item" data-action="open-file"><i class="fas fa-folder-open"></i> Open File <span>Ctrl+O</span></div>
+            <div class="dd-item" data-action="open-folder"><i class="fas fa-folder"></i> Open Folder <span>Ctrl+Shift+O</span></div>
+            <div class="dd-sep"></div>
+            <div class="dd-item" data-action="save"><i class="fas fa-save"></i> Save <span>Ctrl+S</span></div>
+          </div>
+        </div>
+        <div class="menu-item">View
+          <div class="dropdown">
+            <div class="dd-item" data-action="toggle-sidebar"><i class="fas fa-columns"></i> Sidebar <span>Ctrl+B</span></div>
+            <div class="dd-item" data-action="toggle-terminal"><i class="fas fa-terminal"></i> Terminal <span>Ctrl+`</span></div>
+            <div class="dd-item" data-action="refresh-preview"><i class="fas fa-sync"></i> Refresh <span>F5</span></div>
+          </div>
+        </div>
+        <div class="menu-item">Servers
+          <div class="dropdown">
+            <div class="dd-item" data-action="start-php-server"><i class="fas fa-play"></i> Start PHP Server</div>
+            <div class="dd-item" data-action="stop-php-server"><i class="fas fa-stop"></i> Stop PHP Server</div>
+            <div class="dd-sep"></div>
+            <div class="dd-item" data-action="start-apache"><i class="fas fa-play"></i> Start Apache</div>
+            <div class="dd-item" data-action="stop-apache"><i class="fas fa-stop"></i> Stop Apache</div>
+            <div class="dd-sep"></div>
+            <div class="dd-item" data-action="start-mysql"><i class="fas fa-play"></i> Start MySQL</div>
+            <div class="dd-item" data-action="stop-mysql"><i class="fas fa-stop"></i> Stop MySQL</div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main: Preview | Editor -->
+    <div id="main">
+      <!-- LEFT: Preview -->
+      <div id="preview-panel">
+        <div class="preview-toolbar">
+          <button class="pnav" id="btn-prev-back" title="Back"><i class="fas fa-arrow-left"></i></button>
+          <button class="pnav" id="btn-prev-fwd" title="Forward"><i class="fas fa-arrow-right"></i></button>
+          <button class="pnav" id="btn-prev-reload" title="Reload"><i class="fas fa-sync-alt"></i></button>
+          <div class="url-wrap">
+            <i class="fas fa-lock" id="url-icon"></i>
+            <input type="text" id="preview-url" placeholder="http://localhost:8080">
+          </div>
+          <button class="pnav" id="btn-prev-ext" title="Open in browser"><i class="fas fa-external-link-alt"></i></button>
+          <div class="dev-toggle">
+            <button class="dev-btn active" data-dev="desktop"><i class="fas fa-desktop"></i></button>
+            <button class="dev-btn" data-dev="tablet"><i class="fas fa-tablet-alt"></i></button>
+            <button class="dev-btn" data-dev="mobile"><i class="fas fa-mobile-alt"></i></button>
+          </div>
+        </div>
+        <div id="preview-wrap">
+          <iframe id="preview-frame"></iframe>
+          <div id="preview-empty">
+            <i class="fas fa-play-circle"></i>
+            <p>Open a folder to start live preview</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="v-resize" id="v-resize"></div>
+
+      <!-- RIGHT: Editor -->
+      <div id="editor-panel">
+        <div id="sidebar" class="expanded">
+          <div class="sb-tabs">
+            <button class="sb-tab active" data-tab="files"><i class="fas fa-folder"></i></button>
+            <button class="sb-tab" data-tab="git"><i class="fab fa-git-alt"></i></button>
+            <button class="sb-tab" data-tab="search"><i class="fas fa-search"></i></button>
+            <button class="sb-tab" data-tab="servers"><i class="fas fa-server"></i></button>
+          </div>
+          <div class="sb-panels">
+            <div id="panel-files" class="sb-panel active">
+              <div class="sb-hdr"><span>EXPLORER</span>
+                <div class="sb-actions">
+                  <button class="sb-act" id="btn-new-file" title="New File"><i class="fas fa-file"></i></button>
+                  <button class="sb-act" id="btn-new-folder" title="New Folder"><i class="fas fa-folder-plus"></i></button>
+                  <button class="sb-act" id="btn-refresh" title="Refresh"><i class="fas fa-sync"></i></button>
+                </div>
+              </div>
+              <div id="ws-name" class="ws-name"><i class="fas fa-chevron-down"></i> No folder opened</div>
+              <div id="file-tree" class="tree"></div>
+            </div>
+            <div id="panel-git" class="sb-panel">
+              <div class="sb-hdr"><span>SOURCE CONTROL</span></div>
+              <div class="git-box">
+                <div class="git-branch"><i class="fab fa-git-alt"></i> <span id="git-branch">main</span></div>
+                <textarea id="git-msg" placeholder="Commit message..."></textarea>
+                <button id="btn-commit" class="btn-accent"><i class="fas fa-check"></i> Commit</button>
+              </div>
+            </div>
+            <div id="panel-search" class="sb-panel">
+              <div class="sb-hdr"><span>SEARCH</span></div>
+              <div class="search-box"><input type="text" id="search-input" placeholder="Search..."></div>
+              <div id="search-results"></div>
+            </div>
+            <div id="panel-servers" class="sb-panel">
+              <div class="sb-hdr"><span>SERVERS</span>
+                <div class="sb-actions"><button class="sb-act" id="btn-srv-refresh" title="Refresh Status"><i class="fas fa-sync"></i></button></div>
+              </div>
+              <div class="srv-panel">
+                <div class="srv-card" id="srv-card-php">
+                  <div class="srv-card-hdr"><i class="fas fa-code"></i> PHP Built-in Server</div>
+                  <div class="srv-card-body">
+                    <div class="srv-status" id="srv-php-status"><span class="dot"></span><span class="label">Stopped</span><span class="port-badge">:8080</span></div>
+                    <div class="srv-row"><label>Port:</label><input type="number" id="srv-php-port" value="8080" min="1024" max="65535"></div>
+                    <div class="srv-btns">
+                      <button class="btn-start" id="btn-srv-php-start"><i class="fas fa-play"></i> Start</button>
+                      <button class="btn-stop" id="btn-srv-php-stop"><i class="fas fa-stop"></i> Stop</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="srv-card" id="srv-card-mysql">
+                  <div class="srv-card-hdr"><i class="fas fa-database"></i> MySQL</div>
+                  <div class="srv-card-body">
+                    <div class="srv-status" id="srv-mysql-status"><span class="dot"></span><span class="label">Stopped</span><span class="port-badge">:3306</span></div>
+                    <div class="srv-row"><label>Port:</label><input type="number" id="srv-mysql-port" value="3306" min="1024" max="65535" disabled></div>
+                    <div class="srv-btns">
+                      <button class="btn-start" id="btn-srv-mysql-start"><i class="fas fa-play"></i> Start</button>
+                      <button class="btn-stop" id="btn-srv-mysql-stop"><i class="fas fa-stop"></i> Stop</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="srv-card" id="srv-card-apache">
+                  <div class="srv-card-hdr"><i class="fas fa-server"></i> Apache</div>
+                  <div class="srv-card-body">
+                    <div class="srv-status" id="srv-apache-status"><span class="dot"></span><span class="label">Stopped</span><span class="port-badge">:80</span></div>
+                    <div class="srv-row"><label>Port:</label><input type="number" id="srv-apache-port" value="80" min="1024" max="65535" disabled></div>
+                    <div class="srv-btns">
+                      <button class="btn-start" id="btn-srv-apache-start"><i class="fas fa-play"></i> Start</button>
+                      <button class="btn-stop" id="btn-srv-apache-stop"><i class="fas fa-stop"></i> Stop</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="srv-folder">
+                  <div class="srv-folder-hdr"><i class="fas fa-folder-open"></i> Project Folder</div>
+                  <div class="srv-folder-path" id="srv-www-path">servers/www</div>
+                  <button class="btn-accent" id="btn-srv-open-www"><i class="fas fa-folder-open"></i> Open in Explorer</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="editor-area">
+          <div id="ed-tabs"><div class="ed-tabs-scroll" id="ed-tabs-scroll"></div></div>
+          <div id="ed-content">
+            <div id="welcome">
+              <h1><i class="fas fa-code"></i> Brauser IDE</h1>
+              <p>Open a folder to start coding with live preview</p>
+              <p class="hint"><kbd>Alt</kbd> menu &middot; <kbd>Ctrl+O</kbd> open &middot; <kbd>F5</kbd> refresh</p>
+              <div class="welcome-btns">
+                <div class="w-btn" id="w-open-folder"><i class="fas fa-folder-open"></i><span>Open Folder</span></div>
+                <div class="w-btn" id="w-go-project" style="display:none;"><i class="fas fa-rocket"></i><span>Go to Project</span></div>
+              </div>
+            </div>
+            <div id="editor" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom: Terminal -->
+    <div id="bottom" style="display:none;">
+      <div class="h-resize" id="h-resize"></div>
+      <div class="bot-tabs">
+        <button class="bt active" data-bp="terminal"><i class="fas fa-terminal"></i> TERMINAL</button>
+        <button class="bt" data-bp="output"><i class="fas fa-list"></i> OUTPUT</button>
+        <button class="bt" data-bp="database"><i class="fas fa-database"></i> DATABASE</button>
+        <div class="bt-right"><button class="sb-act" id="btn-close-bot"><i class="fas fa-times"></i></button></div>
+      </div>
+      <div class="bot-panels">
+        <div id="bp-terminal" class="bot-p active">
+          <div class="term-wrap">
+            <div id="term-output"></div>
+            <div class="term-input-line">
+              <span id="term-prompt">$ </span>
+              <input type="text" id="term-input" autofocus spellcheck="false" autocomplete="off">
+            </div>
+          </div>
+        </div>
+        <div id="bp-output" class="bot-p"><pre id="output-text"></pre></div>
+        <div id="bp-database" class="bot-p">
+          <div class="db-bar">
+            <select id="db-sel"><option value="">Select Database</option></select>
+            <button id="btn-db-run" class="btn-accent"><i class="fas fa-play"></i> Run</button>
+          </div>
+          <textarea id="db-sql" placeholder="SQL query..."></textarea>
+          <div id="db-out"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <footer id="statusbar">
+      <div class="st-l">
+        <div class="st clickable" id="st-servers"><i class="fas fa-server"></i> <span id="st-server-text">Stopped</span></div>
+        <div class="st clickable" id="st-live-preview" title="Live Preview: update preview when switching files"><i class="fas fa-eye"></i> Live: OFF</div>
+      </div>
+      <div class="st-r">
+        <div class="st" id="st-cursor">Ln 1, Col 1</div>
+        <div class="st" id="st-enc">UTF-8</div>
+        <div class="st" id="st-type">PHP</div>
+      </div>
+    </footer>
+  </div>
+
+  <div id="ctx" class="ctx" style="display:none;">
+    <div class="ctx-item" data-act="new-file"><i class="fas fa-file"></i> New File</div>
+    <div class="ctx-item" data-act="new-folder"><i class="fas fa-folder-plus"></i> New Folder</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-act="rename"><i class="fas fa-i-cursor"></i> Rename</div>
+    <div class="ctx-item" data-act="delete"><i class="fas fa-trash"></i> Delete</div>
+    <div class="ctx-sep"></div>
+    <div class="ctx-item" data-act="copy-path"><i class="fas fa-link"></i> Copy Path</div>
+  </div>
+
+  <div id="notif" class="notif" style="display:none;">
+    <span id="notif-text"></span>
+    <button id="notif-close">&times;</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
