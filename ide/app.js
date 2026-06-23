@@ -218,6 +218,9 @@ class IDE {
       }
     });
     this.on('btn-srv-refresh', 'click', () => { this.checkServers(); this.notify('Status refreshed', 'info'); });
+    this.on('btn-phpmyadmin', 'click', () => {
+      this.loadPreview('http://localhost:' + this.serverPort + '/phpmyadmin/');
+    });
 
     // Auto-refresh server status every 5 seconds
     setInterval(() => this.checkServers(), 5000);
@@ -488,12 +491,12 @@ class IDE {
 
     const r = await window.api.startPhpServer(this.serverPort, this.folder);
     if (r.success) {
-      // Build URL from folderInfo if available
-      if (this.folderInfo?.indexFile && this.folderInfo?.serverType === 'php') {
-        this.previewUrl = 'http://localhost:' + this.serverPort + '/' + this.folderInfo.indexFile;
-      } else {
-        this.previewUrl = 'http://localhost:' + this.serverPort;
-      }
+    // Build URL from folderInfo if available
+    if (this.folderInfo?.indexFile && this.folderInfo?.serverType === 'php') {
+      this.previewUrl = 'http://localhost:' + this.serverPort + '/active-project/' + this.folderInfo.indexFile;
+    } else {
+      this.previewUrl = 'http://localhost:' + this.serverPort + '/active-project/';
+    }
       document.getElementById('preview-url').value = this.previewUrl;
       this.notify('PHP server started on port ' + this.serverPort, 'success');
       setTimeout(() => { this.refreshPreview(); this.checkServers(); this.updateGoToProject(); }, 1500);
@@ -578,8 +581,7 @@ class IDE {
       if (['html', 'htm', 'php'].includes(ext)) {
         const relativePath = path.replace(this.folder, '').replace(/^\//, '');
         if (this.previewUrl?.startsWith('http')) {
-          // For server-based projects, update with relative path
-          const newUrl = this.previewUrl.replace(/\/[^/]*$/, '') + '/' + relativePath;
+          const newUrl = 'http://localhost:' + this.serverPort + '/active-project/' + relativePath;
           this.previewUrl = newUrl;
           document.getElementById('preview-url').value = newUrl;
         } else {
