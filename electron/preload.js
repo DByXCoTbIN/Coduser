@@ -64,9 +64,12 @@ contextBridge.exposeInMainWorld('api', {
   openPath: (p) => ipcRenderer.invoke('shell:open-path', p),
   getInstallCmd: (pkg) => ipcRenderer.invoke('shell:get-install-cmd', pkg),
 
-  // Terminal
-  termRun: (cmd, cwd) => ipcRenderer.invoke('term:run', cmd, cwd),
-  termKill: (pid) => ipcRenderer.invoke('term:kill', pid),
+  // Terminal (node-pty)
+  termCreate: (cwd) => ipcRenderer.invoke('term:create', cwd),
+  termWrite: (id, data) => ipcRenderer.invoke('term:write', id, data),
+  termResize: (id, cols, rows) => ipcRenderer.invoke('term:resize', id, cols, rows),
+  termKill: (id) => ipcRenderer.invoke('term:kill', id),
+  onTermData: (cb) => ipcRenderer.on('term:data', (_, id, data) => cb(id, data)),
 
   platform: process.platform
 });

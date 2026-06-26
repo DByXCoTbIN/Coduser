@@ -17,6 +17,9 @@ class IDE {
     this.termLines = [];
     this.folderInfo = null;    // scanned folder info
     this.livePreview = false;  // live preview toggle (off by default)
+    this.term = null;          // xterm.js instance
+    this.termId = null;        // pty session id
+    this.fitAddon = null;      // xterm fit addon
   }
 
   async boot() {
@@ -29,6 +32,7 @@ class IDE {
     await this.restoreState();
     this.checkServers();
     this.updateLivePreviewIndicator();
+    this.initTerminal();
   }
 
   // ===== Monaco =====
@@ -102,6 +106,8 @@ class IDE {
       this.refreshTree();
       // Scan folder and auto-start server
       await this.scanAndStartServer();
+      // Recreate terminal with folder CWD
+      if (this.term) this.createPtySession();
     }
     if (state.openFiles?.length) {
       for (const f of state.openFiles) {
@@ -219,21 +225,13 @@ class IDE {
     });
     this.on('btn-srv-refresh', 'click', () => { this.checkServers(); this.notify('Status refreshed', 'info'); });
     this.on('btn-phpmyadmin', 'click', () => {
-      this.loadPreview('http://localhost:' + this.serverPort + '/phpmyadmin/');
+      const url = 'http://localhost/phpmyadmin/';
+      this.loadPreview(url);
+      if (window.api?.openExternal) setTimeout(() => window.api.openExternal(url), 200);
     });
 
     // Auto-refresh server status every 5 seconds
     setInterval(() => this.checkServers(), 5000);
-
-    // Terminal input
-    this.on('term-input', 'keydown', e => {
-      if (e.key === 'Enter') {
-        const input = e.target;
-        const cmd = input.value.trim();
-        if (cmd) this.runTerminal(cmd);
-        input.value = '';
-      }
-    });
 
     document.querySelectorAll('.bt').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -242,6 +240,7 @@ class IDE {
         document.querySelectorAll('.bot-p').forEach(p => p.classList.remove('active'));
         document.getElementById('bp-' + tab.dataset.bp)?.classList.add('active');
         this.showBottom();
+        if (tab.dataset.bp === 'terminal' && this.term) { setTimeout(() => { this.fitAddon?.fit(); this.term?.focus(); }, 50); }
       });
     });
     this.on('btn-close-bot', 'click', () => { document.getElementById('bottom').style.display = 'none'; this.layoutEditor(); });
@@ -252,7 +251,7 @@ class IDE {
       if (e.ctrlKey && e.key === '`') { e.preventDefault(); this.toggleBottom(); }
       if (e.key === 'F5') { e.preventDefault(); this.refreshPreview(); }
     });
-    window.addEventListener('resize', () => this.layoutEditor());
+    window.addEventListener('resize', () => { this.layoutEditor(); this.fitAddon?.fit(); });
   }
 
   on(id, ev, fn) { document.getElementById(id)?.addEventListener(ev, fn); }
@@ -262,17 +261,18 @@ class IDE {
     let drag = false;
     const vr = document.getElementById('v-resize');
     const pp = document.getElementById('preview-panel');
+    const pf = document.getElementById('preview-frame');
     if (vr && pp) {
-      vr.addEventListener('mousedown', e => { drag = true; document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; e.preventDefault(); });
-      document.addEventListener('mousemove', e => { if (!drag) return; pp.style.flex = '0 0 ' + Math.max(250, Math.min(document.getElementById('main').getBoundingClientRect().width - 300, e.clientX - pp.getBoundingClientRect().left)) + 'px'; this.layoutEditor(); });
-      document.addEventListener('mouseup', () => { drag = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; });
+      vr.addEventListener('mousedown', e => { drag = true; if (pf) pf.classList.add('frozen'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; e.preventDefault(); });
+      document.addEventListener('mousemove', e => { if (!drag) return; const mainW = document.getElementById('main').getBoundingClientRect().width; const w = Math.max(200, Math.min(mainW - 200, e.clientX - pp.getBoundingClientRect().left)); pp.style.width = w + 'px'; pp.style.flex = 'none'; this.layoutEditor(); });
+      document.addEventListener('mouseup', () => { if (pf) pf.classList.remove('frozen'); drag = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; });
     }
     const hr = document.getElementById('h-resize');
     const bp = document.getElementById('bottom');
     if (hr && bp) {
       let drag2 = false;
       hr.addEventListener('mousedown', e => { drag2 = true; document.body.style.cursor = 'ns-resize'; document.body.style.userSelect = 'none'; e.preventDefault(); });
-      document.addEventListener('mousemove', e => { if (!drag2) return; bp.style.height = Math.max(80, Math.min(500, window.innerHeight - e.clientY)) + 'px'; this.layoutEditor(); });
+      document.addEventListener('mousemove', e => { if (!drag2) return; bp.style.height = Math.max(80, Math.min(500, window.innerHeight - e.clientY)) + 'px'; this.layoutEditor(); this.fitAddon?.fit(); });
       document.addEventListener('mouseup', () => { drag2 = false; document.body.style.cursor = ''; document.body.style.userSelect = ''; });
     }
   }
@@ -409,6 +409,9 @@ class IDE {
     // Scan folder to detect project type
     await this.scanAndStartServer();
 
+    // Recreate terminal session with new CWD
+    if (this.term) this.createPtySession();
+
     this.persistState();
   }
 
@@ -493,9 +496,9 @@ class IDE {
     if (r.success) {
     // Build URL from folderInfo if available
     if (this.folderInfo?.indexFile && this.folderInfo?.serverType === 'php') {
-      this.previewUrl = 'http://localhost:' + this.serverPort + '/active-project/' + this.folderInfo.indexFile;
+      this.previewUrl = 'http://localhost:' + this.serverPort + '/' + this.folderInfo.indexFile;
     } else {
-      this.previewUrl = 'http://localhost:' + this.serverPort + '/active-project/';
+      this.previewUrl = 'http://localhost:' + this.serverPort + '/';
     }
       document.getElementById('preview-url').value = this.previewUrl;
       this.notify('PHP server started on port ' + this.serverPort, 'success');
@@ -581,7 +584,7 @@ class IDE {
       if (['html', 'htm', 'php'].includes(ext)) {
         const relativePath = path.replace(this.folder, '').replace(/^\//, '');
         if (this.previewUrl?.startsWith('http')) {
-          const newUrl = 'http://localhost:' + this.serverPort + '/active-project/' + relativePath;
+          const newUrl = 'http://localhost:' + this.serverPort + '/' + relativePath;
           this.previewUrl = newUrl;
           document.getElementById('preview-url').value = newUrl;
         } else {
@@ -627,11 +630,11 @@ class IDE {
     }
   }
   toggleBottom() { const b = document.getElementById('bottom'); b.style.display = b.style.display === 'none' ? 'flex' : 'none'; this.showBottom(); }
-  showBottom() { document.getElementById('bottom').style.display = 'flex'; this.layoutEditor(); }
+  showBottom() { document.getElementById('bottom').style.display = 'flex'; this.layoutEditor(); setTimeout(() => this.fitAddon?.fit(), 50); }
 
   // ===== Menu Actions =====
   menuAction(action) {
-    ({ 'new-file': () => this.newFile(), 'open-file': () => this.openFile(), 'open-folder': () => this.openFolder(), 'save': () => this.saveAndRefresh(), 'toggle-sidebar': () => { document.getElementById('sidebar').classList.toggle('expanded'); this.layoutEditor(); }, 'toggle-terminal': () => this.toggleBottom(), 'refresh-preview': () => this.refreshPreview(), 'start-php-server': () => this.startPhpServer(), 'stop-php-server': () => this.stopPhpServer(), 'phpmyadmin': () => window.api?.openExternal?.('http://localhost:8080/phpmyadmin') })[action]?.();
+    ({ 'new-file': () => this.newFile(), 'open-file': () => this.openFile(), 'open-folder': () => this.openFolder(), 'save': () => this.saveAndRefresh(), 'toggle-sidebar': () => { document.getElementById('sidebar').classList.toggle('expanded'); this.layoutEditor(); }, 'toggle-terminal': () => this.toggleBottom(), 'refresh-preview': () => this.refreshPreview(), 'start-php-server': () => this.startPhpServer(), 'stop-php-server': () => this.stopPhpServer(), 'phpmyadmin': () => { const u = 'http://localhost/phpmyadmin/'; if (window.api?.openExternal) window.api.openExternal(u); } })[action]?.();
   }
 
   // ===== Servers =====
@@ -742,30 +745,55 @@ class IDE {
     if (window.api?.gitCommit && this.folder) { await window.api.gitCommit(this.folder, msg); document.getElementById('git-msg').value = ''; this.notify('Committed', 'success'); }
   }
 
-  // ===== Terminal =====
-  async runTerminal(cmd) {
-    const output = document.getElementById('term-output');
-    const prompt = document.getElementById('term-prompt');
-    const input = document.getElementById('term-input');
+  // ===== Terminal (xterm.js + node-pty) =====
+  initTerminal() {
+    if (!document.getElementById('terminal-container') || !window.Terminal) return;
+    this.fitAddon = new FitAddon();
+    this.term = new Terminal({
+      cursorBlink: true,
+      cursorStyle: 'block',
+      fontSize: 13,
+      fontFamily: "'Fira Code',Consolas,'Courier New',monospace",
+      theme: {
+        background: '#1e1e1e',
+        foreground: '#cccccc',
+        cursor: '#cccccc',
+        selectionBackground: '#264f78',
+        black: '#1e1e1e', red: '#f44747', green: '#4ec9b0', yellow: '#dcdcaa',
+        blue: '#569cd6', magenta: '#c586c0', cyan: '#4fc1ff', white: '#d4d4d4',
+        brightBlack: '#808080', brightRed: '#f44747', brightGreen: '#4ec9b0',
+        brightYellow: '#dcdcaa', brightBlue: '#569cd6', brightMagenta: '#c586c0',
+        brightCyan: '#4fc1ff', brightWhite: '#ffffff',
+      },
+      allowTransparency: false,
+      scrollback: 5000,
+    });
+    this.term.loadAddon(this.fitAddon);
+    this.term.open(document.getElementById('terminal-container'));
+    this.fitAddon.fit();
 
-    output.textContent += (prompt?.textContent || '$ ') + cmd + '\n';
-    input.disabled = true;
+    this.term.onData((data) => {
+      if (this.termId != null) window.api.termWrite(this.termId, data);
+    });
 
-    if (window.api?.termRun) {
-      const r = await window.api.termRun(cmd, this.folder || undefined);
-      if (r.bg) {
-        output.textContent += r.output + '\n';
-      } else {
-        output.textContent += (r.output || '') + '\n';
-        if (!r.success && r.output) output.textContent += '\n';
-      }
+    window.api.onTermData((id, data) => {
+      if (id === this.termId) this.term.write(data);
+    });
+
+    this.createPtySession();
+  }
+
+  async createPtySession() {
+    if (!window.api?.termCreate) return;
+    if (this.termId != null) { await window.api.termKill(this.termId); this.termId = null; }
+    const r = await window.api.termCreate(this.folder || undefined);
+    if (r.success) {
+      this.termId = r.id;
+      this.term.clear();
+      this.term.focus();
     } else {
-      output.textContent += 'Terminal not available\n';
+      this.term.write('Failed to create terminal session\r\n');
     }
-
-    input.disabled = false;
-    input.focus();
-    output.scrollTop = output.scrollHeight;
   }
 
   runDbQuery() { this.notify('Database - start MySQL first', 'info'); }

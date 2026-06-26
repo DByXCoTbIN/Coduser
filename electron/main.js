@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const { execSync, spawn } = require("child_process");
 const os = require("os");
+const pty = require("node-pty");
 
 app.commandLine.appendSwitch("disable-gpu");
 app.commandLine.appendSwitch("no-sandbox");
@@ -192,6 +193,10 @@ function buildPreviewUrl(folderInfo, port) {
 
 function isPortUsed(port) {
   try {
+    if (process.platform === "win32") {
+      const r = execSync(`netstat -ano | findstr :${port}`, { timeout: 3000, encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
+      return r.includes(":" + port);
+    }
     const r = execSync(
       `ss -tlnp sport = :${port} 2>/dev/null || netstat -tlnp 2>/dev/null | grep :${port}`,
       { timeout: 3000, encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] },
@@ -204,6 +209,10 @@ function isPortUsed(port) {
 
 function isProcessRunning(name) {
   try {
+    if (process.platform === "win32") {
+      const r = execSync(`tasklist /FI "IMAGENAME eq ${name}.exe" 2>nul`, { timeout: 3000, encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
+      return r.includes(".exe");
+    }
     execSync(`pgrep -x ${name}`, { timeout: 2000, stdio: "ignore" });
     return true;
   } catch {
@@ -218,16 +227,8 @@ function startPhpDevServer(port = 8080, dir = WWW_DIR) {
     if (!php) return { success: false, error: "PHP not found" };
     if (isPortUsed(String(port))) return { success: false, error: `Port ${port} already in use` };
 
-    // Always serve from SERVERS_DIR so phpmyadmin/ and project/ are both accessible
-    const serveDir = SERVERS_DIR;
-
-    // Create symlink: servers/active-project → user's folder
-    const linkPath = path.join(SERVERS_DIR, 'active-project');
-    try { fs.unlinkSync(linkPath); } catch {}
-    try { fs.symlinkSync(dir, linkPath); } catch (e) {
-      // If symlink fails, copy index files as fallback
-      console.log('Symlink failed, using direct serve from:', dir);
-    }
+    // Serve directly from the project directory (or WWW_DIR as fallback)
+    const serveDir = dir;
 
     phpProcess = spawn(php, ["-S", `0.0.0.0:${port}`, "-t", serveDir], {
       detached: true,
@@ -253,12 +254,6 @@ function startPhpDevServer(port = 8080, dir = WWW_DIR) {
         } else {
           resolve({ success: false, error: "PHP server failed to start" });
         }
-      }, 1000);
-    });
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-}
       }, 1000);
     });
   } catch (e) {
@@ -351,11 +346,14 @@ function isServiceInstalled(name) {
       return true;
     }
     if (process.platform === "win32") {
-      // Check common Windows paths
+      // Check common Windows paths based on service name
+      const nameMap = { mysqld: "mysql", mysql: "mysql", mariadbd: "mariadb", mariadb: "mariadb", httpd: "apache", apache2: "apache" };
+      const base = nameMap[name] || name;
       const paths = [
-        "C:\\xampp\\mysql\\bin\\mysqld.exe",
-        "C:\\Program Files\\MySQL",
-        "C:\\Program Files (x86)\\MySQL",
+        `C:\\xampp\\${base}\\bin`,
+        `C:\\xampp\\${base}\\bin\\${name}.exe`,
+        `C:\\Program Files\\${base === "apache" ? "Apache" : base === "mysql" ? "MySQL" : base}`,
+        `C:\\Program Files (x86)\\${base === "apache" ? "Apache" : base === "mysql" ? "MySQL" : base}`,
       ];
       return paths.some((p) => fs.existsSync(p));
     }
@@ -811,12 +809,15 @@ function setupIPC() {
           cmd,
         );
 
+      const shell = process.platform === "win32" ? "cmd.exe" : "sh";
+      const shellArgs = process.platform === "win32" ? ["/c", cmd] : ["-c", cmd];
+      const cwdFinal = cwd || WWW_DIR;
+
       if (isLongRunning) {
         // Background process - don't wait
         try {
-          const parts = cmd.split(/\s+/);
-          const proc = spawn(parts[0], parts.slice(1), {
-            cwd: cwd || WWW_DIR,
+          const proc = spawn(shell, shellArgs, {
+            cwd: cwdFinal,
             detached: true,
             stdio: "ignore",
             env: { ...process.env, TERM: "xterm-256color" },
@@ -831,8 +832,8 @@ function setupIPC() {
         let stdout = "",
           stderr = "";
         try {
-          const proc = spawn("sh", ["-c", cmd], {
-            cwd: cwd || WWW_DIR,
+          const proc = spawn(shell, shellArgs, {
+            cwd: cwdFinal,
             env: { ...process.env, TERM: "xterm-256color" },
             timeout: 30000,
           });
@@ -868,6 +869,40 @@ function setupIPC() {
   // Terminal - list background processes
   ipcMain.handle("term:list-bg", () => {
     return { processes: [] };
+  });
+
+  // ===== node-pty Terminal =====
+  const terminals = {};
+  let termId = 0;
+
+  ipcMain.handle("term:create", (_, cwd) => {
+    const id = ++termId;
+    const shell = process.platform === "win32" ? "powershell.exe" : process.env.SHELL || "/bin/bash";
+    const p = pty.spawn(shell, [], {
+      name: "xterm-256color",
+      cols: 80,
+      rows: 24,
+      cwd: cwd || process.env.HOME || process.env.USERPROFILE,
+      env: process.env,
+    });
+    p.onData((data) => {
+      if (mainWindow) mainWindow.webContents.send("term:data", id, data);
+    });
+    p.onExit(() => { delete terminals[id]; });
+    terminals[id] = p;
+    return { success: true, id };
+  });
+
+  ipcMain.handle("term:write", (_, id, data) => {
+    const p = terminals[id];
+    if (p) { p.write(data); return { success: true }; }
+    return { success: false, error: "Terminal not found" };
+  });
+
+  ipcMain.handle("term:resize", (_, id, cols, rows) => {
+    const p = terminals[id];
+    if (p) { p.resize(cols, rows); return { success: true }; }
+    return { success: false, error: "Terminal not found" };
   });
 }
 

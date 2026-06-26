@@ -5,6 +5,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:* https://*; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src https://cdnjs.cloudflare.com; img-src 'self' data: http://localhost:* https:*; connect-src 'self' http://localhost:*; frame-src *;">
   <title>Brauser IDE</title>
   <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="terminal/xterm.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
@@ -196,15 +197,9 @@
         <div class="bt-right"><button class="sb-act" id="btn-close-bot"><i class="fas fa-times"></i></button></div>
       </div>
       <div class="bot-panels">
-        <div id="bp-terminal" class="bot-p active">
-          <div class="term-wrap">
-            <div id="term-output"></div>
-            <div class="term-input-line">
-              <span id="term-prompt">$ </span>
-              <input type="text" id="term-input" autofocus spellcheck="false" autocomplete="off">
-            </div>
-          </div>
-        </div>
+    <div id="bp-terminal" class="bot-p active">
+      <div id="terminal-container"></div>
+    </div>
         <div id="bp-output" class="bot-p"><pre id="output-text"></pre></div>
         <div id="bp-database" class="bot-p">
           <div class="db-bar">
@@ -247,6 +242,8 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+  <script src="terminal/xterm.js"></script>
+  <script src="terminal/addon-fit.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
